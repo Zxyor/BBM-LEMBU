@@ -42,7 +42,7 @@ COLOR_ROW_ODD = colors.white
 COLOR_BORDER = colors.HexColor("#000000") 
 
 # --- KONFIGURASI HALAMAN ---
-st.set_page_config(page_title="Sistem BBM Proyek LEMBU", layout="wide")
+st.set_page_config(page_title="Sistem BBM Proyek LEMBU", layout="wide",page_icon="lembu.png")
 
 # --- KONEKSI DATABASE ---
 def init_connection():
@@ -1795,7 +1795,46 @@ def main():
         else: st.info("Belum ada data untuk ditampilkan di grafik.")
 
         st.divider(); st.subheader(f"📅 Monitoring Bulanan ({start_rep.strftime('%b %Y')} - {end_rep.strftime('%b %Y')})")
-        st.dataframe(pd.DataFrame(m_data_mon if 'm_data_mon' in locals() else []), hide_index=True)
+        m_data_mon = []
+        stok_run_mon = hitung_stok_awal_periode(conn, lokasi_id, start_rep)
+        curr_mon = start_rep.replace(day=1)
+        end_limit_mon = end_rep.replace(day=1)
+        
+        while curr_mon <= end_limit_mon:
+            m = curr_mon.month; y = curr_mon.year
+            q_in = f"SELECT SUM(jumlah_liter) FROM bbm_masuk WHERE lokasi_id={lokasi_id} AND MONTH(tanggal)={m} AND YEAR(tanggal)={y}"
+            q_out = f"SELECT SUM(jumlah_liter) FROM bbm_keluar WHERE lokasi_id={lokasi_id} AND MONTH(tanggal)={m} AND YEAR(tanggal)={y}"
+            cursor.execute(q_in); res_in = cursor.fetchone(); mi = float(res_in[0]) if res_in and res_in[0] else 0.0
+            cursor.execute(q_out); res_out = cursor.fetchone(); mo = float(res_out[0]) if res_out and res_out[0] else 0.0
+            
+            prev_mon = stok_run_mon
+            stok_run_mon = prev_mon + mi - mo
+            
+            m_data_mon.append({
+                'Bulan': curr_mon.strftime("%B %Y"), 
+                'Sisa Bulan Lalu': prev_mon, 
+                'Masuk': mi, 
+                'Keluar': mo, 
+                'Sisa Akhir': stok_run_mon,
+                'bulan_nama': get_bulan_indonesia(m)[:3],
+                'masuk': mi,   # Key ini dipakai untuk fungsi generate_monthly_chart
+                'keluar': mo   # Key ini dipakai untuk fungsi generate_monthly_chart
+            })
+            curr_mon = curr_mon + relativedelta(months=1)
+            
+        df_m_mon = pd.DataFrame(m_data_mon)
+        
+        if not df_m_mon.empty:
+            # 1. Tampilkan Grafiknya
+            img_m_buf = generate_monthly_chart(df_m_mon)
+            if img_m_buf: 
+                st.image(img_m_buf, caption="Grafik Masuk & Keluar Bulanan")
+            
+            # 2. Tampilkan Tabelnya (Pilih kolom yang rapi untuk dibaca user)
+            df_m_mon_display = df_m_mon[['Bulan', 'Sisa Bulan Lalu', 'Masuk', 'Keluar', 'Sisa Akhir']].copy()
+            st.dataframe(df_m_mon_display, hide_index=True, use_container_width=True)
+        else:
+            st.info("Belum ada data bulanan.")
 
     with t3:
         st.header("🖨️ Export Laporan Periode")
