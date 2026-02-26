@@ -1,5 +1,6 @@
 streamlit
-mysql-connector-python
+numpy<2.0.0
+mysql-connector-python==8.3.0
 pandas
 matplotlib
 reportlab
