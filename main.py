@@ -45,6 +45,7 @@ COLOR_BORDER = colors.HexColor("#000000")
 st.set_page_config(page_title="Sistem BBM Proyek LEMBU", layout="wide",page_icon="lembu.png")
 
 # --- KONEKSI DATABASE ---
+@st.cache_resource(ttl=3600)
 def init_connection():
     return mysql.connector.connect(
         host=st.secrets["db"]["host"],
@@ -1523,7 +1524,7 @@ def generate_docx_one_sheet(conn, lokasi_id, nama_lokasi, start_date_global, end
 
 def main():
     try: 
-        conn = init_connection(); cursor = conn.cursor(buffered=True) 
+        conn = init_connection(); conn.ping(reconnect=True, attempts=3, delay=1); cursor = conn.cursor(buffered=True) 
         try: cursor.execute("SELECT stok_awal FROM lokasi_proyek LIMIT 1"); cursor.fetchall()
         except: cursor.execute("ALTER TABLE lokasi_proyek ADD COLUMN stok_awal FLOAT DEFAULT 0"); conn.commit()
         try: cursor.execute("SELECT kunci_lokasi FROM lokasi_proyek LIMIT 1"); cursor.fetchall()
