@@ -7,6 +7,7 @@ import datetime
 import math
 import re
 from dateutil.relativedelta import relativedelta
+from sqlalchemy import create_engine
 
 # --- SETUP MATPLOTLIB ---
 import matplotlib
@@ -47,16 +48,24 @@ st.set_page_config(page_title="Sistem BBM Proyek LEMBU", layout="wide",page_icon
 
 # --- KONEKSI DATABASE ---
 @st.cache_resource(ttl=3600)
-def init_connection():
-    return pymysql.connect(
-        host=st.secrets["db"]["host"],
-        user=st.secrets["db"]["user"],
-        password=st.secrets["db"]["password"],
-        database=st.secrets["db"]["database"],
-        port=int(st.secrets["db"]["port"]),
-        autocommit=True,
-        ssl={"ca": certifi.where()}
+def init_engine():
+    user = st.secrets["db"]["user"]
+    password = st.secrets["db"]["password"]
+    host = st.secrets["db"]["host"]
+    port = st.secrets["db"]["port"]
+    database = st.secrets["db"]["database"]
+    
+    # Merakit URL koneksi
+    db_url = f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}"
+    
+    # Membuat "Pool" (antrean) koneksi yang cerdas dan anti-tabrakan
+    engine = create_engine(
+        db_url, 
+        connect_args={"ssl": {"ca": certifi.where()}},
+        pool_recycle=3600,
+        pool_pre_ping=True  # Otomatis mengecek koneksi mati/hidup tanpa perlu conn.ping()
     )
+    return engine
 
 # --- HELPER FUNCTIONS ---
 def get_bulan_indonesia(bulan_int):
@@ -1527,7 +1536,7 @@ def generate_docx_one_sheet(conn, lokasi_id, nama_lokasi, start_date_global, end
 
 def main():
     try: 
-        conn = init_connection(); conn.ping(reconnect=True); cursor = conn.cursor() 
+        engine = init_engine(); conn = engine.raw_connection(); cursor = conn.cursor() 
         try: cursor.execute("SELECT stok_awal FROM lokasi_proyek LIMIT 1"); cursor.fetchall()
         except: cursor.execute("ALTER TABLE lokasi_proyek ADD COLUMN stok_awal FLOAT DEFAULT 0"); conn.commit()
         try: cursor.execute("SELECT kunci_lokasi FROM lokasi_proyek LIMIT 1"); cursor.fetchall()
