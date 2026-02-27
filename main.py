@@ -1,5 +1,5 @@
 import streamlit as st
-import mysql.connector
+import pymysql
 import pandas as pd
 import io
 import datetime
@@ -47,12 +47,13 @@ st.set_page_config(page_title="Sistem BBM Proyek LEMBU", layout="wide",page_icon
 # --- KONEKSI DATABASE ---
 @st.cache_resource(ttl=3600)
 def init_connection():
-    return mysql.connector.connect(
+    return pymysql.connect(
         host=st.secrets["db"]["host"],
         user=st.secrets["db"]["user"],
         password=st.secrets["db"]["password"],
         database=st.secrets["db"]["database"],
-        port=st.secrets["db"]["port"]
+        port=int(st.secrets["db"]["port"]),
+        autocommit=True
     )
 
 # --- HELPER FUNCTIONS ---
@@ -1524,7 +1525,7 @@ def generate_docx_one_sheet(conn, lokasi_id, nama_lokasi, start_date_global, end
 
 def main():
     try: 
-        conn = init_connection(); conn.ping(reconnect=True, attempts=3, delay=1); cursor = conn.cursor(buffered=True) 
+        conn = init_connection(); conn.ping(reconnect=True); cursor = conn.cursor() 
         try: cursor.execute("SELECT stok_awal FROM lokasi_proyek LIMIT 1"); cursor.fetchall()
         except: cursor.execute("ALTER TABLE lokasi_proyek ADD COLUMN stok_awal FLOAT DEFAULT 0"); conn.commit()
         try: cursor.execute("SELECT kunci_lokasi FROM lokasi_proyek LIMIT 1"); cursor.fetchall()
