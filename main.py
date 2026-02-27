@@ -1,6 +1,7 @@
 import streamlit as st
 import pymysql
 import pandas as pd
+import certifi
 import io
 import datetime
 import math
@@ -54,8 +55,7 @@ def init_connection():
         database=st.secrets["db"]["database"],
         port=int(st.secrets["db"]["port"]),
         autocommit=True,
-        ssl_verify_cert=True,
-        ssl_verify_identity=True
+        ssl={"ca": certifi.where()}
     )
 
 # --- HELPER FUNCTIONS ---
