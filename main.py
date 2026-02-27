@@ -53,7 +53,9 @@ def init_connection():
         password=st.secrets["db"]["password"],
         database=st.secrets["db"]["database"],
         port=int(st.secrets["db"]["port"]),
-        autocommit=True
+        autocommit=True,
+        ssl_verify_cert=True,
+        ssl_verify_identity=True
     )
 
 # --- HELPER FUNCTIONS ---
