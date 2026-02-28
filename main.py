@@ -1549,20 +1549,8 @@ def main():
         cursor.execute("""CREATE TABLE IF NOT EXISTS rekap_exclude (id INT AUTO_INCREMENT PRIMARY KEY, lokasi_id INT, nama_unit_full VARCHAR(255))"""); conn.commit()
     except Exception as e: st.error(f"Database Error: {e}"); st.stop()
 
-    password_rahasia = "123" 
-    if "logged_in" not in st.session_state: st.session_state.logged_in = False
     if "active_project_id" not in st.session_state: st.session_state.active_project_id = None
-    if "active_project_name" not in st.session_state: st.session_state.active_project_name = None
-
-    if not st.session_state.logged_in:
-        st.markdown("<h1 style='text-align: center;'>🔐 Login Admin</h1>", unsafe_allow_html=True)
-        c1, c2, c3 = st.columns([1,2,1])
-        with c2:
-            pwd = st.text_input("Masukkan Password Admin:", type="password")
-            if st.button("Login", use_container_width=True):
-                if pwd == password_rahasia: st.session_state.logged_in = True; st.rerun()
-                else: st.error("Password Salah!")
-        st.stop() 
+    if "active_project_name" not in st.session_state: st.session_state.active_project_name = None 
 
     if st.session_state.active_project_id is None:
         st.title("🗂️ Menu Utama")
