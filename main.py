@@ -415,7 +415,7 @@ def generate_pdf_portrait(conn, lokasi_id, nama_lokasi, start_date_global, end_d
         cursor.execute(q_in); res_in = cursor.fetchone(); mi = float(res_in[0]) if res_in and res_in[0] else 0.0
         cursor.execute(q_out); res_out = cursor.fetchone(); mo = float(res_out[0]) if res_out and res_out[0] else 0.0
         prev = stok_run; stok_run = prev + mi - mo
-        m_data.append({'bln': curr.strftime("%B %Y"), 'awal': prev, 'masuk': mi, 'keluar': mo, 'sisa': stok_run, 'bulan_nama': get_bulan_indonesia(m)[:3]})
+        m_data.append({'bln': f"{get_bulan_indonesia(curr.month)} {curr.year}", 'awal': prev, 'masuk': mi, 'keluar': mo, 'sisa': stok_run, 'bulan_nama': get_bulan_indonesia(m)[:3]})
         curr = curr + relativedelta(months=1)
     
     df_m = pd.DataFrame(m_data)
@@ -682,7 +682,7 @@ def generate_pdf_one_sheet(conn, lokasi_id, nama_lokasi, start_date_global, end_
         cursor.execute(q_in); res_in = cursor.fetchone(); mi = float(res_in[0]) if res_in and res_in[0] else 0.0
         cursor.execute(q_out); res_out = cursor.fetchone(); mo = float(res_out[0]) if res_out and res_out[0] else 0.0
         prev = stok_run; stok_run = prev + mi - mo
-        m_data.append({'bln': curr.strftime("%B %Y"), 'awal': prev, 'masuk': mi, 'keluar': mo, 'sisa': stok_run, 'bulan_nama': get_bulan_indonesia(m)[:3]})
+        m_data.append({'bln': f"{get_bulan_indonesia(curr.month)} {curr.year}", 'awal': prev, 'masuk': mi, 'keluar': mo, 'sisa': stok_run, 'bulan_nama': get_bulan_indonesia(m)[:3]})
         curr = curr + relativedelta(months=1)
 
     df_m = pd.DataFrame(m_data)
@@ -823,7 +823,7 @@ def generate_docx_fixed(conn, lokasi_id, nama_lokasi, start_date_global, end_dat
         cursor.execute(q_in); res_in = cursor.fetchone(); mi = float(res_in[0]) if res_in and res_in[0] else 0.0
         cursor.execute(q_out); res_out = cursor.fetchone(); mo = float(res_out[0]) if res_out and res_out[0] else 0.0
         prev = stok_run; stok_run = prev + mi - mo
-        m_data.append({'bln': curr.strftime("%B %Y"), 'awal': prev, 'masuk': mi, 'keluar': mo, 'sisa': stok_run, 'bulan_nama': get_bulan_indonesia(m)[:3]})
+        m_data.append({'bln': f"{get_bulan_indonesia(curr.month)} {curr.year}", 'awal': prev, 'masuk': mi, 'keluar': mo, 'sisa': stok_run, 'bulan_nama': get_bulan_indonesia(m)[:3]})
         curr = curr + relativedelta(months=1)
 
     df_m = pd.DataFrame(m_data)
@@ -974,7 +974,7 @@ def generate_excel_styled(conn, lokasi_id, nama_lokasi, start_date_global, end_d
         cursor.execute(q_in); res_in = cursor.fetchone(); mi = float(res_in[0]) if res_in and res_in[0] else 0.0
         cursor.execute(q_out); res_out = cursor.fetchone(); mo = float(res_out[0]) if res_out and res_out[0] else 0.0
         prev = stok_run; stok_run = prev + mi - mo
-        m_data.append({'bln': curr.strftime("%B %Y"), 'awal': prev, 'masuk': mi, 'keluar': mo, 'sisa': stok_run, 'bulan_nama': get_bulan_indonesia(m)[:3]})
+        m_data.append({'bln': f"{get_bulan_indonesia(curr.month)} {curr.year}", 'awal': prev, 'masuk': mi, 'keluar': mo, 'sisa': stok_run, 'bulan_nama': get_bulan_indonesia(m)[:3]})
         curr = curr + relativedelta(months=1)
     df_m = pd.DataFrame(m_data)
     img_m_buf = generate_monthly_chart(df_m)
@@ -1188,7 +1188,7 @@ def generate_excel_one_sheet(conn, lokasi_id, nama_lokasi, start_date_global, en
         cursor.execute(q_in); res_in = cursor.fetchone(); mi = float(res_in[0]) if res_in and res_in[0] else 0.0
         cursor.execute(q_out); res_out = cursor.fetchone(); mo = float(res_out[0]) if res_out and res_out[0] else 0.0
         prev = stok_run; stok_run = prev + mi - mo
-        m_data.append({'bln': curr.strftime("%B %Y"), 'awal': prev, 'masuk': mi, 'keluar': mo, 'sisa': stok_run, 'bulan_nama': get_bulan_indonesia(m)[:3]})
+        m_data.append({'bln': f"{get_bulan_indonesia(curr.month)} {curr.year}", 'awal': prev, 'masuk': mi, 'keluar': mo, 'sisa': stok_run, 'bulan_nama': get_bulan_indonesia(m)[:3]})
         curr = curr + relativedelta(months=1)
     df_m = pd.DataFrame(m_data)
     img_m_buf = generate_monthly_chart(df_m)
@@ -1387,7 +1387,7 @@ def generate_docx_one_sheet(conn, lokasi_id, nama_lokasi, start_date_global, end
         cursor.execute(q_in); res_in = cursor.fetchone(); mi = float(res_in[0]) if res_in and res_in[0] else 0.0
         cursor.execute(q_out); res_out = cursor.fetchone(); mo = float(res_out[0]) if res_out and res_out[0] else 0.0
         prev = stok_run; stok_run = prev + mi - mo
-        m_data.append({'bln': curr.strftime("%B %Y"), 'awal': prev, 'masuk': mi, 'keluar': mo, 'sisa': stok_run, 'bulan_nama': get_bulan_indonesia(m)[:3]})
+        m_data.append({'bln': f"{get_bulan_indonesia(curr.month)} {curr.year}", 'awal': prev, 'masuk': mi, 'keluar': mo, 'sisa': stok_run, 'bulan_nama': get_bulan_indonesia(m)[:3]})
         curr = curr + relativedelta(months=1)
 
     df_m = pd.DataFrame(m_data)
@@ -1809,7 +1809,7 @@ def main():
             stok_run_mon = prev_mon + mi - mo
             
             m_data_mon.append({
-                'Bulan': curr_mon.strftime("%B %Y"), 
+                'Bulan': f"{get_bulan_indonesia(curr_mon.month)} {curr_mon.year}", 
                 'Sisa Bulan Lalu': prev_mon, 
                 'Masuk': mi, 
                 'Keluar': mo, 
