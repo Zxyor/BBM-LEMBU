@@ -1491,8 +1491,13 @@ def main():
     df_ex = pd.read_sql(f"SELECT nama_unit_full FROM rekap_exclude WHERE lokasi_id={lokasi_id}", conn)
     excluded_list = df_ex['nama_unit_full'].tolist() if not df_ex.empty else []
 
-    if not df_masuk_all.empty: df_masuk_all['HARI'] = pd.to_datetime(df_masuk_all['tanggal']).apply(get_hari_indonesia)
-    if not df_keluar_all.empty: df_keluar_all['HARI'] = pd.to_datetime(df_keluar_all['tanggal']).apply(get_hari_indonesia)
+    # OPTIMASI
+    if not df_masuk_all.empty: 
+        df_masuk_all['tanggal'] = pd.to_datetime(df_masuk_all['tanggal'])
+        df_masuk_all['HARI'] = df_masuk_all['tanggal'].apply(get_hari_indonesia)
+    if not df_keluar_all.empty: 
+        df_keluar_all['tanggal'] = pd.to_datetime(df_keluar_all['tanggal'])
+        df_keluar_all['HARI'] = df_keluar_all['tanggal'].apply(get_hari_indonesia)
 
     st.title(f"🚜 Dashboard: {nama_proyek}")
     t1, t2, t3 = st.tabs(["📝 Input & History", "📊 Laporan & Grafik", "🖨️ Export Dokumen"])
@@ -1788,10 +1793,17 @@ def main():
         
         while curr_mon <= end_limit_mon:
             m = curr_mon.month; y = curr_mon.year
-            q_in = f"SELECT SUM(jumlah_liter) FROM bbm_masuk WHERE lokasi_id={lokasi_id} AND MONTH(tanggal)={m} AND YEAR(tanggal)={y}"
-            q_out = f"SELECT SUM(jumlah_liter) FROM bbm_keluar WHERE lokasi_id={lokasi_id} AND MONTH(tanggal)={m} AND YEAR(tanggal)={y}"
-            cursor.execute(q_in); res_in = cursor.fetchone(); mi = float(res_in[0]) if res_in and res_in[0] else 0.0
-            cursor.execute(q_out); res_out = cursor.fetchone(); mo = float(res_out[0]) if res_out and res_out[0] else 0.0
+            
+            # OPTIMASI
+            mi = 0.0
+            if not df_masuk_all.empty:
+                mask_in = (df_masuk_all['tanggal'].dt.month == m) & (df_masuk_all['tanggal'].dt.year == y)
+                mi = float(df_masuk_all.loc[mask_in, 'jumlah_liter'].sum())
+                
+            mo = 0.0
+            if not df_keluar_all.empty:
+                mask_out = (df_keluar_all['tanggal'].dt.month == m) & (df_keluar_all['tanggal'].dt.year == y)
+                mo = float(df_keluar_all.loc[mask_out, 'jumlah_liter'].sum())
             
             prev_mon = stok_run_mon
             stok_run_mon = prev_mon + mi - mo
