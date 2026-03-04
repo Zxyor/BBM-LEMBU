@@ -1427,6 +1427,7 @@ def generate_docx_one_sheet(conn, lokasi_id, nama_lokasi, start_date_global, end
 def main():
     if "edit_id" not in st.session_state: st.session_state.edit_id = None
     if "edit_tipe" not in st.session_state: st.session_state.edit_tipe = None
+    if "is_super_admin" not in st.session_state: st.session_state.is_super_admin = False
 
     try: 
         engine = init_engine(); conn = engine.raw_connection(); cursor = conn.cursor() 
@@ -1446,8 +1447,68 @@ def main():
     if "active_project_name" not in st.session_state: st.session_state.active_project_name = None 
 
     if st.session_state.active_project_id is None:
+        
+        # --- SIDEBAR SUPER ADMIN LOGIN ---
+        with st.sidebar:
+            st.header("Super Admin")
+            if not st.session_state.is_super_admin:
+                with st.form("admin_login"):
+                    admin_pass = st.text_input("Password Admin", type="password")
+                    if st.form_submit_button("Masuk Halaman Admin"):
+                        # Mengecek password menggunakan st.secrets agar aman
+                        try:
+                            if admin_pass == st.secrets["admin"]["password"]:
+                                st.session_state.is_super_admin = True
+                                st.rerun()
+                            else:
+                                st.error("Password Admin Salah!")
+                        except KeyError:
+                            st.error("Error: [admin] password belum disetting di secrets.toml!")
+            else:
+                if st.button("⬅️ Keluar Mode Admin", use_container_width=True):
+                    st.session_state.is_super_admin = False
+                    st.rerun()
+
+        # --- HALAMAN SUPER ADMIN ---
+        if st.session_state.is_super_admin:
+            st.title("Halaman Super Admin")
+            st.warning("⚠️ **PERINGATAN**: Halaman ini digunakan untuk menghapus lokasi secara permanen. Semua histori data Masuk, Keluar, dan Log pada lokasi tersebut akan ikut terhapus dan tidak bisa dikembalikan.")
+            st.divider()
+            
+            try: df_lokasi_admin = pd.read_sql("SELECT * FROM lokasi_proyek", conn)
+            except: df_lokasi_admin = pd.DataFrame()
+            
+            if not df_lokasi_admin.empty:
+                with st.container(border=True):
+                    st.subheader("Hapus Lokasi Beserta Datanya")
+                    lok_to_del = st.selectbox("Pilih Lokasi Proyek yang akan dihapus:", df_lokasi_admin['nama_tempat'])
+                    konfirmasi = st.text_input('Untuk melanjutkan, ketik "KONFIRMASI" (huruf besar semua) di bawah ini:')
+                    
+                    if st.button("Hapus Lokasi Permanen", type="primary"):
+                        if konfirmasi == "KONFIRMASI":
+                            lok_id_del = df_lokasi_admin[df_lokasi_admin['nama_tempat'] == lok_to_del].iloc[0]['id']
+                            try:
+                                # Menghapus semua relasi data secara berurutan
+                                cursor.execute("DELETE FROM bbm_masuk WHERE lokasi_id=%s", (lok_id_del,))
+                                cursor.execute("DELETE FROM bbm_keluar WHERE lokasi_id=%s", (lok_id_del,))
+                                cursor.execute("DELETE FROM log_aktivitas WHERE lokasi_id=%s", (lok_id_del,))
+                                cursor.execute("DELETE FROM rekap_exclude WHERE lokasi_id=%s", (lok_id_del,))
+                                cursor.execute("DELETE FROM lokasi_proyek WHERE id=%s", (lok_id_del,))
+                                conn.commit()
+                                st.success(f"Berhasil! Lokasi '{lok_to_del}' beserta semua history datanya telah dihapus.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Gagal menghapus data: {e}")
+                        else:
+                            st.error("Gagal! Teks konfirmasi tidak sesuai. Harap ketik KONFIRMASI dengan benar.")
+            else:
+                st.info("Belum ada data lokasi.")
+                
+            st.stop() # Menghentikan script di sini agar menu utama tidak ikut ter-render
+
+        # --- MENU UTAMA NORMAL ---
         st.title("🗂️ Menu Utama")
-        st.write("Selamat Datang, Admin. Silakan pilih lokasi proyek atau buat baru.")
+        st.write("Selamat Datang. Silakan pilih lokasi proyek atau buat baru.")
         st.divider()
         col_left, col_right = st.columns(2, gap="large")
         with col_left:
@@ -1499,7 +1560,7 @@ def main():
         df_keluar_all['tanggal'] = pd.to_datetime(df_keluar_all['tanggal'])
         df_keluar_all['HARI'] = df_keluar_all['tanggal'].apply(get_hari_indonesia)
 
-    st.title(f"🚜 Dashboard: {nama_proyek}")
+    st.title(f"Dashboard: {nama_proyek}")
     t1, t2, t3 = st.tabs(["📝 Input & History", "📊 Laporan & Grafik", "🖨️ Export Dokumen"])
     
     with t1:
@@ -1699,7 +1760,7 @@ def main():
         tm_rep = float(df_masuk_rep['jumlah_liter'].sum()); tk_rep = float(df_keluar_rep['jumlah_liter'].sum())
         sisa_rep = stok_awal_periode_val + tm_rep - tk_rep
 
-        st.markdown(f"""<div style="background-color:#d4edda;padding:15px;border-radius:10px;border:1px solid #c3e6cb;text-align:center;margin-bottom:20px;margin-top:10px;"><h2 style="color:#155724;margin:0;">💰 SISA STOK PERIODE INI: {sisa_rep:,.2f} Liter</h2><span style="color:#155724;font-weight:bold;">(Sisa Bulan Lalu: {stok_awal_periode_val:,.0f} + Masuk: {tm_rep:,.0f} - Keluar: {tk_rep:,.0f})</span></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div style="background-color:#d4edda;padding:15px;border-radius:10px;border:1px solid #c3e6cb;text-align:center;margin-bottom:20px;margin-top:10px;"><h2 style="color:#155724;margin:0;">SISA STOK PERIODE INI: {sisa_rep:,.2f} Liter</h2><span style="color:#155724;font-weight:bold;">(Sisa Bulan Lalu: {stok_awal_periode_val:,.0f} + Masuk: {tm_rep:,.0f} - Keluar: {tk_rep:,.0f})</span></div>""", unsafe_allow_html=True)
         
         with st.expander("⚙️ ATUR REKAP (Sembunyikan Unit ke 'Lainnya')", expanded=False):
             st.write("Pilih Unit yang ingin digabung menjadi **'Lainnya'** di tabel Rekapitulasi.")
