@@ -1481,6 +1481,11 @@ def main():
             if not df_lokasi_admin.empty:
                 with st.container(border=True):
                     st.subheader("Hapus Lokasi Beserta Datanya")
+
+                    if "clear_konfirmasi" in st.session_state and st.session_state.clear_konfirmasi:
+                        st.session_state.input_konfirmasi_hapus = ""
+                        st.session_state.clear_konfirmasi = False
+
                     lok_to_del = st.selectbox("Pilih Lokasi Proyek yang akan dihapus:", df_lokasi_admin['nama_tempat'])
                     konfirmasi = st.text_input('Untuk melanjutkan, ketik "KONFIRMASI" (huruf besar semua) di bawah ini:', key="input_konfirmasi_hapus")
                     
@@ -1496,7 +1501,7 @@ def main():
                                 cursor.execute("DELETE FROM lokasi_proyek WHERE id=%s", (lok_id_del,))
                                 conn.commit()
                                 st.success(f"Berhasil! Lokasi '{lok_to_del}' beserta semua history datanya telah dihapus.")
-                                st.session_state.input_konfirmasi_hapus = ""
+                                st.session_state.clear_konfirmasi = True
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Gagal menghapus data: {e}")
