@@ -308,7 +308,8 @@ def generate_pdf_portrait(conn, lokasi_id, nama_lokasi, start_date_global, end_d
         tk_rpt = float(df_keluar_table['jumlah_liter'].sum()) if not df_keluar_table.empty else 0.0
         sisa_akhir = stok_awal + tm - tk_real
 
-        elements.append(Paragraph(f"LAPORAN BBM: {nama_lokasi}", title_style))
+        elements.append(Paragraph("LAPORAN BBM", title_style))
+        elements.append(Paragraph(nama_lokasi, title_style))
         elements.append(Paragraph(f"PERIODE {get_bulan_indonesia(start_date.month)} {start_date.year}", periode_style))
         
         left_queue = []; left_queue.append({'type': 'title_section', 'val': 'PENGGUNAAN BBM (KELUAR)'}); left_queue.append({'type': 'header_col'}) 
@@ -514,7 +515,8 @@ def generate_pdf_one_sheet(conn, lokasi_id, nama_lokasi, start_date_global, end_
         data_left = full_data_list[:SPLIT_IDX]
         data_right = full_data_list[SPLIT_IDX:]
         
-        elements.append(Paragraph(f"LAPORAN BBM: {nama_lokasi}", title_style))
+        elements.append(Paragraph("LAPORAN BBM", title_style))
+        elements.append(Paragraph(nama_lokasi, title_style))
         elements.append(Paragraph(f"PERIODE {get_bulan_indonesia(start_date.month)} {start_date.year}", period_style))
 
         left_stack = []
@@ -724,139 +726,6 @@ def generate_pdf_one_sheet(conn, lokasi_id, nama_lokasi, start_date_global, end_
     buffer.seek(0)
     return buffer
 
-def generate_docx_fixed(conn, lokasi_id, nama_lokasi, start_date_global, end_date_global, excluded_list):
-    doc = Document(); 
-    for s in doc.sections: s.left_margin=Cm(1); s.right_margin=Cm(1)
-    date_ranges = split_date_range_by_month(start_date_global, end_date_global)
-
-    for idx, (start_date, end_date) in enumerate(date_ranges):
-        if idx > 0: doc.add_page_break()
-        p = doc.add_paragraph(f"LAPORAN BBM: {nama_lokasi}"); p.alignment = WD_ALIGN_PARAGRAPH.CENTER; p.runs[0].bold = True; p.runs[0].font.size = Pt(14)
-        p2 = doc.add_paragraph(f"PERIODE {get_bulan_indonesia(start_date.month)} {start_date.year}"); p2.alignment = WD_ALIGN_PARAGRAPH.CENTER; p2.runs[0].font.size = Pt(11)
-        doc.add_paragraph()
-
-        layout_table = doc.add_table(rows=1, cols=2); layout_table.autofit = False; layout_table.allow_autofit = False
-        layout_table.columns[0].width = Cm(10); layout_table.columns[1].width = Cm(9)
-        cell_left = layout_table.cell(0, 0); cell_right = layout_table.cell(0, 1)
-
-        stok_awal = hitung_stok_awal_periode(conn, lokasi_id, start_date)
-        df_keluar = pd.read_sql(f"SELECT * FROM bbm_keluar WHERE lokasi_id={lokasi_id} AND tanggal BETWEEN '{start_date}' AND '{end_date}' ORDER BY tanggal", conn)
-        if not df_keluar.empty and 'kategori' not in df_keluar.columns: df_keluar['kategori'] = df_keluar['nama_alat'].apply(cek_kategori)
-        
-        df_keluar_raw = filter_non_consumption(df_keluar)
-        df_keluar_table = process_transfers_for_table(df_keluar_raw)
-        df_alat_g, df_truck_g, df_lain_g = segregate_data(df_keluar_table, excluded_list)
-        df_alat_chart, df_truck_chart, _ = segregate_data(df_keluar_raw, excluded_list)
-        
-        cell_left.add_paragraph("PENGGUNAAN BBM (KELUAR)", style='Heading 3')
-        tbl_k = cell_left.add_table(rows=1, cols=4); tbl_k.style = 'Table Grid'
-        h_k = tbl_k.rows[0].cells; h_k[0].text="TGL"; h_k[1].text="ALAT"; h_k[2].text="UNIT"; h_k[3].text="LTR"
-        
-        processed_data = prepare_data_global_subtotals(df_keluar_table)
-        if processed_data:
-            last_date = None; is_grey = False
-            for item in processed_data:
-                if item['type'] == 'data':
-                    curr_date = item['tanggal']; is_grey = not is_grey if last_date is not None and curr_date != last_date else is_grey; last_date = curr_date
-                    row = tbl_k.add_row().cells
-                    if is_grey:
-                        for c in row: set_cell_bg(c, "F2F2F2")
-                    row[0].text = item['tanggal'].strftime('%d/%m'); row[1].text = item['nama_alat']; row[2].text = item['no_unit']; row[3].text = f"{item['jumlah_liter']:.0f}"
-                    for c in row: c.paragraphs[0].runs[0].font.size = Pt(8)
-                elif item['type'] == 'daily_total':
-                    row = tbl_k.add_row().cells
-                    row[1].text = f"TOTAL {item['tanggal'].strftime('%d/%m')}"; row[3].text = f"{item['total_liter']:.0f}"
-                    set_cell_bg(row[1], "F8CBAD"); set_cell_bg(row[3], "F8CBAD") # Orange
-                    row[1].paragraphs[0].runs[0].font.bold = True; row[3].paragraphs[0].runs[0].font.bold = True
-                    row[1].paragraphs[0].runs[0].font.size = Pt(8); row[3].paragraphs[0].runs[0].font.size = Pt(8)
-        
-        df_masuk = pd.read_sql(f"SELECT * FROM bbm_masuk WHERE lokasi_id={lokasi_id} AND tanggal BETWEEN '{start_date}' AND '{end_date}' ORDER BY tanggal", conn)
-        cell_right.add_paragraph("BBM MASUK", style='Heading 3')
-        tbl_m = cell_right.add_table(rows=1, cols=3); tbl_m.style='Table Grid'
-        h_m = tbl_m.rows[0].cells; h_m[0].text="TGL"; h_m[1].text="SUMBER"; h_m[2].text="LTR"
-        if not df_masuk.empty:
-            for i, r in df_masuk.iterrows():
-                row = tbl_m.add_row().cells; row[0].text = r['tanggal'].strftime('%d/%m'); row[1].text = r['sumber']; row[2].text = f"{r['jumlah_liter']:.0f}"
-                for c in row: c.paragraphs[0].runs[0].font.size = Pt(8)
-        cell_right.add_paragraph("")
-        cell_right.add_paragraph("RINCIAN PENGGUNAAN BBM", style='Heading 4')
-        
-        def add_detailed_docx(container, title, df_subset, color_hex):
-            p = container.add_paragraph(title); p.runs[0].font.bold=True; p.runs[0].font.size=Pt(9)
-            t = container.add_table(rows=1, cols=2); t.style='Table Grid'; total_liter = 0
-            if not df_subset.empty and 'jumlah_liter' in df_subset.columns:
-                total_liter = df_subset['jumlah_liter'].sum(); grp = df_subset.groupby(['nama_alat', 'no_unit'])['jumlah_liter'].sum().reset_index()
-                for _, r in grp.iterrows(): row = t.add_row().cells; row[0].text = f"{r['nama_alat']} {r['no_unit']}"; row[1].text = f"{r['jumlah_liter']:.0f}"; 
-                for c in row: c.paragraphs[0].runs[0].font.size = Pt(8)
-            else: t.add_row().cells[0].text = "KOSONG"
-            rt = t.add_row().cells; rt[0].text="TOTAL"; rt[1].text=f"{total_liter:.0f}"
-            for c in rt: 
-                set_cell_bg(c, "FFFF00")
-                if len(c.paragraphs)>0 and len(c.paragraphs[0].runs)>0: c.paragraphs[0].runs[0].bold=True
-                elif len(c.paragraphs)>0: c.paragraphs[0].add_run(c.text).font.bold = True
-        add_detailed_docx(cell_right, "TOTAL PENGGUNAAN BBM ALAT BERAT", df_alat_g, "F4B084"); cell_right.add_paragraph(""); add_detailed_docx(cell_right, "TOTAL PENGGUNAAN BBM MOBIL & TRUCK", df_truck_g, "9BC2E6"); cell_right.add_paragraph("")
-        if not df_lain_g.empty: add_detailed_docx(cell_right, "TOTAL PENGGUNAAN BBM LAINNYA", df_lain_g, "FFB6C1"); cell_right.add_paragraph("")
-
-        tm = float(df_masuk['jumlah_liter'].sum()) if not df_masuk.empty else 0.0
-        tk_real = float(df_keluar['jumlah_liter'].sum()) if not df_keluar.empty else 0.0
-        sisa = stok_awal + tm - tk_real
-        cell_right.add_paragraph("RINCIAN SISA STOK BBM", style='Heading 4')
-        tbl_s = cell_right.add_table(rows=4, cols=2); tbl_s.style='Table Grid'
-        tbl_s.cell(0,0).text="SISA BULAN LALU"; tbl_s.cell(0,1).text=f"{stok_awal:.0f}"
-        tbl_s.cell(1,0).text="TOTAL MASUK"; tbl_s.cell(1,1).text=f"{tm:.0f}"
-        tbl_s.cell(2,0).text="TOTAL KELUAR (REAL)"; tbl_s.cell(2,1).text=f"{tk_real:.0f}"
-        tbl_s.cell(3,0).text="SISA AKHIR"; tbl_s.cell(3,1).text=f"{sisa:.0f}"
-        
-        img_buf = generate_chart_for_report(df_alat_chart, df_truck_chart, width_inch=3.5, height_inch=2.5)
-        if img_buf: 
-            cell_right.add_paragraph("")
-            cell_right.add_paragraph().add_run().add_picture(img_buf, width=Cm(8))
-
-    doc.add_page_break(); p_title = doc.add_paragraph("LAPORAN BBM PERBULAN"); p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER; p_title.runs[0].bold=True; p_title.runs[0].font.size=Pt(14)
-    m_data = []; stok_run = hitung_stok_awal_periode(conn, lokasi_id, start_date_global)
-    curr = start_date_global.replace(day=1); end_limit = end_date_global.replace(day=1)
-    while curr <= end_limit:
-        m = curr.month; y = curr.year
-        q_in = f"SELECT SUM(jumlah_liter) FROM bbm_masuk WHERE lokasi_id={lokasi_id} AND MONTH(tanggal)={m} AND YEAR(tanggal)={y}"
-        q_out = f"SELECT SUM(jumlah_liter) FROM bbm_keluar WHERE lokasi_id={lokasi_id} AND MONTH(tanggal)={m} AND YEAR(tanggal)={y}"
-        cursor = conn.cursor()
-        cursor.execute(q_in); res_in = cursor.fetchone(); mi = float(res_in[0]) if res_in and res_in[0] else 0.0
-        cursor.execute(q_out); res_out = cursor.fetchone(); mo = float(res_out[0]) if res_out and res_out[0] else 0.0
-        prev = stok_run; stok_run = prev + mi - mo
-        m_data.append({'bln': f"{get_bulan_indonesia(curr.month)} {curr.year}", 'awal': prev, 'masuk': mi, 'keluar': mo, 'sisa': stok_run, 'bulan_nama': get_bulan_indonesia(m)[:3]})
-        curr = curr + relativedelta(months=1)
-
-    df_m = pd.DataFrame(m_data)
-    if not df_m.empty:
-        img_m_buf = generate_monthly_chart(df_m)
-        if img_m_buf: doc.add_paragraph().add_run().add_picture(img_m_buf, width=Cm(16))
-    doc.add_paragraph("RINCIAN MASUK DAN PENGGUNAAN SOLAR PERBULANNYA", style='Heading 4')
-    tbl_month = doc.add_table(rows=1, cols=5); tbl_month.style='Table Grid'
-    h_month = tbl_month.rows[0].cells
-    for i, t in enumerate(['BULAN', 'SISA BULAN LALU', 'MASUK', 'KELUAR', 'SISA']): h_month[i].text=t
-    for r in m_data:
-        row = tbl_month.add_row().cells; row[0].text=r['bln']; row[1].text=f"{r['awal']:.0f}"; row[2].text=f"{r['masuk']:.0f}"; row[3].text=f"{r['keluar']:.0f}"; row[4].text=f"{r['sisa']:.0f}"
-    
-    if m_data:
-        t_masuk = sum(x['masuk'] for x in m_data); t_keluar = sum(x['keluar'] for x in m_data); akhir = m_data[-1]['sisa']
-        row = tbl_month.add_row().cells; row[0].text = "TOTAL"; row[2].text = f"{t_masuk:,.0f}"; row[3].text = f"{t_keluar:,.0f}"; row[4].text = f"{akhir:,.0f}"
-        for c in row:
-            set_cell_bg(c, "FFD966")
-            if len(c.paragraphs) > 0 and len(c.paragraphs[0].runs) > 0: c.paragraphs[0].runs[0].font.bold = True
-            elif len(c.paragraphs) > 0: c.paragraphs[0].add_run(c.text).font.bold = True
-
-    df_keluar_all = pd.read_sql(f"SELECT * FROM bbm_keluar WHERE lokasi_id={lokasi_id} AND tanggal BETWEEN '{start_date_global}' AND '{end_date_global}'", conn)
-    if not df_keluar_all.empty:
-        if 'kategori' not in df_keluar_all.columns: df_keluar_all['kategori'] = df_keluar_all['nama_alat'].apply(cek_kategori)
-        df_keluar_rpt = filter_non_consumption(df_keluar_all)
-        df_alat_t, df_truck_t, _ = segregate_data(df_keluar_rpt, excluded_list)
-        img_usage = generate_chart_for_report(df_alat_t, df_truck_t, width_inch=7, height_inch=3.5)
-        if img_usage:
-            doc.add_paragraph().add_run().add_picture(img_usage, width=Cm(16))
-
-    buffer = io.BytesIO(); doc.save(buffer); buffer.seek(0)
-    return buffer
-
 def generate_excel_styled(conn, lokasi_id, nama_lokasi, start_date_global, end_date_global, excluded_list):
     output = io.BytesIO(); wb = Workbook(); wb.remove(wb.active)
     thin = Border(left=Side('thin'), right=Side('thin'), top=Side('thin'), bottom=Side('thin'))
@@ -884,10 +753,11 @@ def generate_excel_styled(conn, lokasi_id, nama_lokasi, start_date_global, end_d
         tk_rpt = float(df_keluar_table['jumlah_liter'].sum()) if not df_keluar_table.empty else 0.0
         sisa_akhir = stok_awal + tm - tk_real
         
-        ws.merge_cells('A1:L1'); ws['A1'] = f"LAPORAN BBM: {nama_lokasi}"; ws['A1'].font = Font(bold=True, size=14); ws['A1'].alignment = Alignment(horizontal='center')
-        ws.merge_cells('A2:L2'); ws['A2'] = f"PERIODE {get_bulan_indonesia(start_date.month)} {start_date.year}"; ws['A2'].font = Font(size=12); ws['A2'].alignment = Alignment(horizontal='center')
+        ws.merge_cells('A1:L1'); ws['A1'] = "LAPORAN BBM"; ws['A1'].font = Font(bold=True, size=14); ws['A1'].alignment = Alignment(horizontal='center')
+        ws.merge_cells('A2:L2'); ws['A2'] = nama_lokasi; ws['A2'].font = Font(bold=True, size=14); ws['A2'].alignment = Alignment(horizontal='center')
+        ws.merge_cells('A3:L3'); ws['A3'] = f"PERIODE {get_bulan_indonesia(start_date.month)} {start_date.year}"; ws['A3'].font = Font(size=12); ws['A3'].alignment = Alignment(horizontal='center')
         
-        r = 4; ws.cell(r, 1, "PENGGUNAAN BBM (KELUAR)").font = Font(bold=True)
+        r = 5; ws.cell(r, 1, "PENGGUNAAN BBM (KELUAR)").font = Font(bold=True)
         headers = ['NO', 'TGL', 'ALAT', 'UNIT', 'LTR', 'KET']
         for i, h in enumerate(headers): c=ws.cell(r+1, i+1, h); c.border=thin; c.fill=PatternFill("solid", fgColor="D3D3D3"); c.alignment=Alignment(horizontal='center')
         r += 2
@@ -911,7 +781,7 @@ def generate_excel_styled(conn, lokasi_id, nama_lokasi, start_date_global, end_d
 
         ws.cell(r, 3, "TOTAL").font=Font(bold=True); c=ws.cell(r, 5, tk_rpt); c.font=Font(bold=True); c.fill=PatternFill("solid", fgColor="FFFF00"); c.border=thin
         
-        r_r = 4; ws.cell(r_r, 9, "BBM MASUK").font = Font(bold=True)
+        r_r = 5; ws.cell(r_r, 9, "BBM MASUK").font = Font(bold=True)
         headers_m = ['NO', 'TGL', 'SUMBER', 'JNS', 'LTR']
         for i, h in enumerate(headers_m): c=ws.cell(r_r+1, i+9, h); c.border=thin; c.fill=PatternFill("solid", fgColor="D3D3D3"); c.alignment=Alignment(horizontal='center')
         r_r += 2
@@ -1033,17 +903,18 @@ def generate_excel_one_sheet(conn, lokasi_id, nama_lokasi, start_date_global, en
         data_left = full_data_list[:SPLIT_IDX]
         data_right = full_data_list[SPLIT_IDX:]
         
-        ws.merge_cells('A1:N1'); ws['A1'] = f"LAPORAN BBM: {nama_lokasi}"; ws['A1'].font = Font(bold=True, size=14); ws['A1'].alignment = Alignment(horizontal='center')
-        ws.merge_cells('A2:N2'); ws['A2'] = f"PERIODE {get_bulan_indonesia(start_date.month)} {start_date.year}"; ws['A2'].font = Font(size=12, bold=True); ws['A2'].alignment = Alignment(horizontal='center')
+        ws.merge_cells('A1:N1'); ws['A1'] = "LAPORAN BBM"; ws['A1'].font = Font(bold=True, size=14); ws['A1'].alignment = Alignment(horizontal='center')
+        ws.merge_cells('A2:N2'); ws['A2'] = nama_lokasi; ws['A2'].font = Font(bold=True, size=14); ws['A2'].alignment = Alignment(horizontal='center')
+        ws.merge_cells('A3:N3'); ws['A3'] = f"PERIODE {get_bulan_indonesia(start_date.month)} {start_date.year}"; ws['A3'].font = Font(size=12, bold=True); ws['A3'].alignment = Alignment(horizontal='center')
         
-        ws.merge_cells('A4:F4'); ws['A4'] = "PENGGUNAAN BBM"; ws['A4'].font = Font(bold=True)
-        ws['A5'] = "NO"; ws['B5'] = "TGL"; ws['C5'] = "ALAT"; ws['D5'] = "UNIT"; ws['E5'] = "LTR"; ws['F5'] = "KET"
-        for c in ['A','B','C','D','E','F']: ws[f'{c}5'].fill = PatternFill("solid", fgColor="2F5496"); ws[f'{c}5'].font = Font(color="FFFFFF", bold=True); ws[f'{c}5'].alignment = Alignment(horizontal='center')
+        ws.merge_cells('A5:F5'); ws['A5'] = "PENGGUNAAN BBM"; ws['A5'].font = Font(bold=True)
+        ws['A6'] = "NO"; ws['B6'] = "TGL"; ws['C6'] = "ALAT"; ws['D6'] = "UNIT"; ws['E6'] = "LTR"; ws['F6'] = "KET"
+        for c in ['A','B','C','D','E','F']: ws[f'{c}6'].fill = PatternFill("solid", fgColor="2F5496"); ws[f'{c}6'].font = Font(color="FFFFFF", bold=True); ws[f'{c}6'].alignment = Alignment(horizontal='center')
         
         ws.column_dimensions['A'].width = 5; ws.column_dimensions['B'].width = 12; ws.column_dimensions['C'].width = 25
         ws.column_dimensions['D'].width = 15; ws.column_dimensions['E'].width = 10; ws.column_dimensions['F'].width = 30
 
-        current_left_row = 6
+        current_left_row = 7
         last_date_l = None; is_grey_l = False
         
         for item in data_left:
@@ -1072,7 +943,7 @@ def generate_excel_one_sheet(conn, lokasi_id, nama_lokasi, start_date_global, en
         col_start = 9 
         ws.column_dimensions['I'].width = 5; ws.column_dimensions['J'].width = 12; ws.column_dimensions['K'].width = 25
         ws.column_dimensions['L'].width = 15; ws.column_dimensions['M'].width = 10; ws.column_dimensions['N'].width = 30
-        current_right_row = 4
+        current_right_row = 5
         
         if data_right:
             ws.merge_cells(start_row=current_right_row, start_column=col_start, end_row=current_right_row, end_column=col_start+5)
@@ -1204,7 +1075,7 @@ def generate_excel_one_sheet(conn, lokasi_id, nama_lokasi, start_date_global, en
         t_masuk = sum(x['masuk'] for x in m_data); t_keluar = sum(x['keluar'] for x in m_data); akhir = m_data[-1]['sisa']
         ws2.cell(r2, 1, "TOTAL").font = Font(bold=True); ws2.cell(r2, 3, t_masuk).font = Font(bold=True); ws2.cell(r2, 4, t_keluar).font = Font(bold=True); ws2.cell(r2, 5, akhir).font = Font(bold=True)
         for i in range(1, 6): c = ws2.cell(r2, i); c.fill = PatternFill("solid", fgColor="FFD966"); c.border = thin
-
+    
     df_keluar_all = pd.read_sql(f"SELECT * FROM bbm_keluar WHERE lokasi_id={lokasi_id} AND tanggal BETWEEN '{start_date_global}' AND '{end_date_global}'", conn)
     if not df_keluar_all.empty:
         if 'kategori' not in df_keluar_all.columns: df_keluar_all['kategori'] = df_keluar_all['nama_alat'].apply(cek_kategori)
@@ -1218,6 +1089,140 @@ def generate_excel_one_sheet(conn, lokasi_id, nama_lokasi, start_date_global, en
     wb.save(output); output.seek(0)
     return output
 
+def generate_docx_fixed(conn, lokasi_id, nama_lokasi, start_date_global, end_date_global, excluded_list):
+    doc = Document(); 
+    for s in doc.sections: s.left_margin=Cm(1); s.right_margin=Cm(1)
+    date_ranges = split_date_range_by_month(start_date_global, end_date_global)
+
+    for idx, (start_date, end_date) in enumerate(date_ranges):
+        if idx > 0: doc.add_page_break()
+        p = doc.add_paragraph("LAPORAN BBM"); p.alignment = WD_ALIGN_PARAGRAPH.CENTER; p.runs[0].bold = True; p.runs[0].font.size = Pt(14); p.paragraph_format.space_after = Pt(0)
+        p_loc = doc.add_paragraph(nama_lokasi); p_loc.alignment = WD_ALIGN_PARAGRAPH.CENTER; p_loc.runs[0].bold = True; p_loc.runs[0].font.size = Pt(14); p_loc.paragraph_format.space_after = Pt(0)
+        p2 = doc.add_paragraph(f"PERIODE {get_bulan_indonesia(start_date.month)} {start_date.year}"); p2.alignment = WD_ALIGN_PARAGRAPH.CENTER; p2.runs[0].font.size = Pt(11)
+        doc.add_paragraph()
+
+        layout_table = doc.add_table(rows=1, cols=2); layout_table.autofit = False; layout_table.allow_autofit = False
+        layout_table.columns[0].width = Cm(10); layout_table.columns[1].width = Cm(9)
+        cell_left = layout_table.cell(0, 0); cell_right = layout_table.cell(0, 1)
+
+        stok_awal = hitung_stok_awal_periode(conn, lokasi_id, start_date)
+        df_keluar = pd.read_sql(f"SELECT * FROM bbm_keluar WHERE lokasi_id={lokasi_id} AND tanggal BETWEEN '{start_date}' AND '{end_date}' ORDER BY tanggal", conn)
+        if not df_keluar.empty and 'kategori' not in df_keluar.columns: df_keluar['kategori'] = df_keluar['nama_alat'].apply(cek_kategori)
+        
+        df_keluar_raw = filter_non_consumption(df_keluar)
+        df_keluar_table = process_transfers_for_table(df_keluar_raw)
+        df_alat_g, df_truck_g, df_lain_g = segregate_data(df_keluar_table, excluded_list)
+        df_alat_chart, df_truck_chart, _ = segregate_data(df_keluar_raw, excluded_list)
+        
+        cell_left.add_paragraph("PENGGUNAAN BBM (KELUAR)", style='Heading 3')
+        tbl_k = cell_left.add_table(rows=1, cols=4); tbl_k.style = 'Table Grid'
+        h_k = tbl_k.rows[0].cells; h_k[0].text="TGL"; h_k[1].text="ALAT"; h_k[2].text="UNIT"; h_k[3].text="LTR"
+        
+        processed_data = prepare_data_global_subtotals(df_keluar_table)
+        if processed_data:
+            last_date = None; is_grey = False
+            for item in processed_data:
+                if item['type'] == 'data':
+                    curr_date = item['tanggal']; is_grey = not is_grey if last_date is not None and curr_date != last_date else is_grey; last_date = curr_date
+                    row = tbl_k.add_row().cells
+                    if is_grey:
+                        for c in row: set_cell_bg(c, "F2F2F2")
+                    row[0].text = item['tanggal'].strftime('%d/%m'); row[1].text = item['nama_alat']; row[2].text = item['no_unit']; row[3].text = f"{item['jumlah_liter']:.0f}"
+                    for c in row: c.paragraphs[0].runs[0].font.size = Pt(8)
+                elif item['type'] == 'daily_total':
+                    row = tbl_k.add_row().cells
+                    row[1].text = f"TOTAL {item['tanggal'].strftime('%d/%m')}"; row[3].text = f"{item['total_liter']:.0f}"
+                    set_cell_bg(row[1], "F8CBAD"); set_cell_bg(row[3], "F8CBAD") # Orange
+                    row[1].paragraphs[0].runs[0].font.bold = True; row[3].paragraphs[0].runs[0].font.bold = True
+                    row[1].paragraphs[0].runs[0].font.size = Pt(8); row[3].paragraphs[0].runs[0].font.size = Pt(8)
+        
+        df_masuk = pd.read_sql(f"SELECT * FROM bbm_masuk WHERE lokasi_id={lokasi_id} AND tanggal BETWEEN '{start_date}' AND '{end_date}' ORDER BY tanggal", conn)
+        cell_right.add_paragraph("BBM MASUK", style='Heading 3')
+        tbl_m = cell_right.add_table(rows=1, cols=3); tbl_m.style='Table Grid'
+        h_m = tbl_m.rows[0].cells; h_m[0].text="TGL"; h_m[1].text="SUMBER"; h_m[2].text="LTR"
+        if not df_masuk.empty:
+            for i, r in df_masuk.iterrows():
+                row = tbl_m.add_row().cells; row[0].text = r['tanggal'].strftime('%d/%m'); row[1].text = r['sumber']; row[2].text = f"{r['jumlah_liter']:.0f}"
+                for c in row: c.paragraphs[0].runs[0].font.size = Pt(8)
+        cell_right.add_paragraph("")
+        cell_right.add_paragraph("RINCIAN PENGGUNAAN BBM", style='Heading 4')
+        
+        def add_detailed_docx(container, title, df_subset, color_hex):
+            p = container.add_paragraph(title); p.runs[0].font.bold=True; p.runs[0].font.size=Pt(9)
+            t = container.add_table(rows=1, cols=2); t.style='Table Grid'; total_liter = 0
+            if not df_subset.empty and 'jumlah_liter' in df_subset.columns:
+                total_liter = df_subset['jumlah_liter'].sum(); grp = df_subset.groupby(['nama_alat', 'no_unit'])['jumlah_liter'].sum().reset_index()
+                for _, r in grp.iterrows(): row = t.add_row().cells; row[0].text = f"{r['nama_alat']} {r['no_unit']}"; row[1].text = f"{r['jumlah_liter']:.0f}"; 
+                for c in row: c.paragraphs[0].runs[0].font.size = Pt(8)
+            else: t.add_row().cells[0].text = "KOSONG"
+            rt = t.add_row().cells; rt[0].text="TOTAL"; rt[1].text=f"{total_liter:.0f}"
+            for c in rt: 
+                set_cell_bg(c, "FFFF00")
+                if len(c.paragraphs)>0 and len(c.paragraphs[0].runs)>0: c.paragraphs[0].runs[0].bold=True
+                elif len(c.paragraphs)>0: c.paragraphs[0].add_run(c.text).font.bold = True
+        add_detailed_docx(cell_right, "TOTAL PENGGUNAAN BBM ALAT BERAT", df_alat_g, "F4B084"); cell_right.add_paragraph(""); add_detailed_docx(cell_right, "TOTAL PENGGUNAAN BBM MOBIL & TRUCK", df_truck_g, "9BC2E6"); cell_right.add_paragraph("")
+        if not df_lain_g.empty: add_detailed_docx(cell_right, "TOTAL PENGGUNAAN BBM LAINNYA", df_lain_g, "FFB6C1"); cell_right.add_paragraph("")
+
+        tm = float(df_masuk['jumlah_liter'].sum()) if not df_masuk.empty else 0.0
+        tk_real = float(df_keluar['jumlah_liter'].sum()) if not df_keluar.empty else 0.0
+        sisa = stok_awal + tm - tk_real
+        cell_right.add_paragraph("RINCIAN SISA STOK BBM", style='Heading 4')
+        tbl_s = cell_right.add_table(rows=4, cols=2); tbl_s.style='Table Grid'
+        tbl_s.cell(0,0).text="SISA BULAN LALU"; tbl_s.cell(0,1).text=f"{stok_awal:.0f}"
+        tbl_s.cell(1,0).text="TOTAL MASUK"; tbl_s.cell(1,1).text=f"{tm:.0f}"
+        tbl_s.cell(2,0).text="TOTAL KELUAR (REAL)"; tbl_s.cell(2,1).text=f"{tk_real:.0f}"
+        tbl_s.cell(3,0).text="SISA AKHIR"; tbl_s.cell(3,1).text=f"{sisa:.0f}"
+        
+        img_buf = generate_chart_for_report(df_alat_chart, df_truck_chart, width_inch=3.5, height_inch=2.5)
+        if img_buf: 
+            cell_right.add_paragraph("")
+            cell_right.add_paragraph().add_run().add_picture(img_buf, width=Cm(8))
+
+    doc.add_page_break(); p_title = doc.add_paragraph("LAPORAN BBM PERBULAN"); p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER; p_title.runs[0].bold=True; p_title.runs[0].font.size=Pt(14)
+    m_data = []; stok_run = hitung_stok_awal_periode(conn, lokasi_id, start_date_global)
+    curr = start_date_global.replace(day=1); end_limit = end_date_global.replace(day=1)
+    while curr <= end_limit:
+        m = curr.month; y = curr.year
+        q_in = f"SELECT SUM(jumlah_liter) FROM bbm_masuk WHERE lokasi_id={lokasi_id} AND MONTH(tanggal)={m} AND YEAR(tanggal)={y}"
+        q_out = f"SELECT SUM(jumlah_liter) FROM bbm_keluar WHERE lokasi_id={lokasi_id} AND MONTH(tanggal)={m} AND YEAR(tanggal)={y}"
+        cursor = conn.cursor()
+        cursor.execute(q_in); res_in = cursor.fetchone(); mi = float(res_in[0]) if res_in and res_in[0] else 0.0
+        cursor.execute(q_out); res_out = cursor.fetchone(); mo = float(res_out[0]) if res_out and res_out[0] else 0.0
+        prev = stok_run; stok_run = prev + mi - mo
+        m_data.append({'bln': f"{get_bulan_indonesia(curr.month)} {curr.year}", 'awal': prev, 'masuk': mi, 'keluar': mo, 'sisa': stok_run, 'bulan_nama': get_bulan_indonesia(m)[:3]})
+        curr = curr + relativedelta(months=1)
+
+    df_m = pd.DataFrame(m_data)
+    if not df_m.empty:
+        img_m_buf = generate_monthly_chart(df_m)
+        if img_m_buf: doc.add_paragraph().add_run().add_picture(img_m_buf, width=Cm(16))
+    doc.add_paragraph("RINCIAN MASUK DAN PENGGUNAAN SOLAR PERBULANNYA", style='Heading 4')
+    tbl_month = doc.add_table(rows=1, cols=5); tbl_month.style='Table Grid'
+    h_month = tbl_month.rows[0].cells
+    for i, t in enumerate(['BULAN', 'SISA BULAN LALU', 'MASUK', 'KELUAR', 'SISA']): h_month[i].text=t
+    for r in m_data:
+        row = tbl_month.add_row().cells; row[0].text=r['bln']; row[1].text=f"{r['awal']:.0f}"; row[2].text=f"{r['masuk']:.0f}"; row[3].text=f"{r['keluar']:.0f}"; row[4].text=f"{r['sisa']:.0f}"
+    
+    if m_data:
+        t_masuk = sum(x['masuk'] for x in m_data); t_keluar = sum(x['keluar'] for x in m_data); akhir = m_data[-1]['sisa']
+        row = tbl_month.add_row().cells; row[0].text = "TOTAL"; row[2].text = f"{t_masuk:,.0f}"; row[3].text = f"{t_keluar:,.0f}"; row[4].text = f"{akhir:,.0f}"
+        for c in row:
+            set_cell_bg(c, "FFD966")
+            if len(c.paragraphs) > 0 and len(c.paragraphs[0].runs) > 0: c.paragraphs[0].runs[0].font.bold = True
+            elif len(c.paragraphs) > 0: c.paragraphs[0].add_run(c.text).font.bold = True
+
+    df_keluar_all = pd.read_sql(f"SELECT * FROM bbm_keluar WHERE lokasi_id={lokasi_id} AND tanggal BETWEEN '{start_date_global}' AND '{end_date_global}'", conn)
+    if not df_keluar_all.empty:
+        if 'kategori' not in df_keluar_all.columns: df_keluar_all['kategori'] = df_keluar_all['nama_alat'].apply(cek_kategori)
+        df_keluar_rpt = filter_non_consumption(df_keluar_all)
+        df_alat_t, df_truck_t, _ = segregate_data(df_keluar_rpt, excluded_list)
+        img_usage = generate_chart_for_report(df_alat_t, df_truck_t, width_inch=7, height_inch=3.5)
+        if img_usage:
+            doc.add_paragraph().add_run().add_picture(img_usage, width=Cm(16))
+
+    buffer = io.BytesIO(); doc.save(buffer); buffer.seek(0)
+    return buffer
+
 def generate_docx_one_sheet(conn, lokasi_id, nama_lokasi, start_date_global, end_date_global, excluded_list):
     doc = Document()
     section = doc.sections[0]
@@ -1230,9 +1235,12 @@ def generate_docx_one_sheet(conn, lokasi_id, nama_lokasi, start_date_global, end
     
     for idx, (start_date, end_date) in enumerate(date_ranges):
         if idx > 0: doc.add_page_break()
-        p = doc.add_paragraph(f"LAPORAN BBM: {nama_lokasi}"); 
+        p = doc.add_paragraph("LAPORAN BBM"); 
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER; p.runs[0].bold=True; p.runs[0].font.size=Pt(14)
         p.paragraph_format.space_after = Pt(0)
+        p_loc = doc.add_paragraph(nama_lokasi); 
+        p_loc.alignment = WD_ALIGN_PARAGRAPH.CENTER; p_loc.runs[0].bold=True; p_loc.runs[0].font.size=Pt(14)
+        p_loc.paragraph_format.space_after = Pt(0)
         p2 = doc.add_paragraph(f"PERIODE {get_bulan_indonesia(start_date.month)} {start_date.year}")
         p2.alignment = WD_ALIGN_PARAGRAPH.CENTER; p2.runs[0].bold=True; p2.runs[0].font.size=Pt(12)
         p2.paragraph_format.space_after = Pt(6) 
@@ -1406,8 +1414,8 @@ def generate_docx_one_sheet(conn, lokasi_id, nama_lokasi, start_date_global, end
         row = tbl_month.add_row().cells; row[0].text = "TOTAL"; row[2].text = f"{t_masuk:,.0f}"; row[3].text = f"{t_keluar:,.0f}"; row[4].text = f"{akhir:,.0f}"
         for c in row:
             set_cell_bg(c, "FFD966")
-            if len(c.paragraphs)>0 and len(c.paragraphs[0].runs)>0: c.paragraphs[0].runs[0].bold = True
-            elif len(c.paragraphs)>0: c.paragraphs[0].add_run(c.text).font.bold = True
+            if len(c.paragraphs) > 0 and len(c.paragraphs[0].runs) > 0: c.paragraphs[0].runs[0].font.bold = True
+            elif len(c.paragraphs) > 0: c.paragraphs[0].add_run(c.text).font.bold = True
 
     doc.add_paragraph() 
     doc.add_paragraph()
